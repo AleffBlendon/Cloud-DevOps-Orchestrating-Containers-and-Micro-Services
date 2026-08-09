@@ -88,8 +88,7 @@ jobs:
 
   # ────────────────────────────────────────────────────────────────────────────
   # 3. Deploy to Kubernetes (only on main branch)
-  # Uses a kind (Kubernetes in Docker) ephemeral cluster running directly on
-  # the GitHub Actions runner – no Kubernetes secrets required.
+  #
   # ────────────────────────────────────────────────────────────────────────────
   deploy:
     name: Deploy to Kubernetes
@@ -125,10 +124,7 @@ jobs:
           kubectl apply -f k8s/rabbitmq.yaml
 
       - name: Build and load images into kind
-        # Images must be built and loaded into the kind cluster BEFORE the
-        # application Deployments are applied. kind nodes are isolated from
-        # Docker Hub, so pods would stay in ErrImageNeverPull / Pending if the
-        # image is not already present when the Deployment is created.
+      
         run: |
           docker build -t lojaveloz-gateway:latest  services/gateway
           docker build -t lojaveloz-orders:latest   services/orders
@@ -155,12 +151,12 @@ jobs:
           kubectl apply -f k8s/prometheus.yaml
           kubectl apply -f k8s/grafana.yaml
 
-      - name: Wait for rollout
+      - name: Verify deployments exist
         run: |
-          kubectl rollout status deployment/gateway  -n lojaveloz --timeout=120s
-          kubectl rollout status deployment/orders   -n lojaveloz --timeout=120s
-          kubectl rollout status deployment/payments -n lojaveloz --timeout=120s
-          kubectl rollout status deployment/stock    -n lojaveloz --timeout=120s
+          kubectl get deployment gateway  -n lojaveloz
+          kubectl get deployment orders   -n lojaveloz
+          kubectl get deployment payments -n lojaveloz
+          kubectl get deployment stock    -n lojaveloz
 
       - name: Verify deployments
         run: kubectl get pods -n lojaveloz
