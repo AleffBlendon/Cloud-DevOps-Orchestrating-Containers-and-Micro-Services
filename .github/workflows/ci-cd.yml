@@ -124,6 +124,22 @@ jobs:
           kubectl apply -f k8s/postgres.yaml
           kubectl apply -f k8s/rabbitmq.yaml
 
+      - name: Build and load images into kind
+        # Images must be built and loaded into the kind cluster BEFORE the
+        # application Deployments are applied. kind nodes are isolated from
+        # Docker Hub, so pods would stay in ErrImageNeverPull / Pending if the
+        # image is not already present when the Deployment is created.
+        run: |
+          docker build -t lojaveloz-gateway:latest  services/gateway
+          docker build -t lojaveloz-orders:latest   services/orders
+          docker build -t lojaveloz-payments:latest services/payments
+          docker build -t lojaveloz-stock:latest    services/stock
+
+          kind load docker-image lojaveloz-gateway:latest  --name lojaveloz
+          kind load docker-image lojaveloz-orders:latest   --name lojaveloz
+          kind load docker-image lojaveloz-payments:latest --name lojaveloz
+          kind load docker-image lojaveloz-stock:latest    --name lojaveloz
+
       - name: Deploy application services
         run: |
           kubectl apply -f k8s/gateway.yaml
@@ -138,21 +154,6 @@ jobs:
         run: |
           kubectl apply -f k8s/prometheus.yaml
           kubectl apply -f k8s/grafana.yaml
-
-      - name: Build and load images into kind
-        # kind clusters are isolated from the host Docker Hub.
-        # Images must be built locally and loaded directly into the cluster
-        # nodes so that pods can pull them (imagePullPolicy: IfNotPresent).
-        run: |
-          docker build -t lojaveloz-gateway:latest  services/gateway
-          docker build -t lojaveloz-orders:latest   services/orders
-          docker build -t lojaveloz-payments:latest services/payments
-          docker build -t lojaveloz-stock:latest    services/stock
-
-          kind load docker-image lojaveloz-gateway:latest  --name lojaveloz
-          kind load docker-image lojaveloz-orders:latest   --name lojaveloz
-          kind load docker-image lojaveloz-payments:latest --name lojaveloz
-          kind load docker-image lojaveloz-stock:latest    --name lojaveloz
 
       - name: Wait for rollout
         run: |
