@@ -1,0 +1,101 @@
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# Deployment – Orders Service
+# Rolling Update: same strategy as gateway – zero-downtime deployments.
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orders
+  namespace: lojaveloz
+  annotations:
+    kubernetes.io/change-cause: "Initial deployment"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: orders
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: orders
+    spec:
+      containers:
+        - name: orders
+          image: cloud-devops-orders:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3001
+          env:
+            - name: PORT
+              value: "3001"
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: lojaveloz-config
+                  key: DB_HOST
+            - name: DB_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: lojaveloz-config
+                  key: DB_PORT
+            - name: DB_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: lojaveloz-config
+                  key: DB_NAME
+            - name: DB_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: lojaveloz-config
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: lojaveloz-secret
+                  key: DB_PASSWORD
+            - name: RABBITMQ_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: lojaveloz-config
+                  key: RABBITMQ_URL
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3001
+            initialDelaySeconds: 15
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3001
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu:    "150m"
+              memory: "128Mi"
+            limits:
+              cpu:    "500m"
+              memory: "256Mi"
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# Service – Orders (ClusterIP – internal traffic only)
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: orders
+  namespace: lojaveloz
+spec:
+  selector:
+    app: orders
+  ports:
+    - port: 3001
+      targetPort: 3001

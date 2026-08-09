@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lojaveloz-config
+  namespace: lojaveloz
+data:
+  # Database
+  DB_HOST:      "postgres"
+  DB_PORT:      "5432"
+  DB_NAME:      "lojaveloz"
+  DB_USER:      "postgres"
+
+  # RabbitMQ
+  RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672"
+
+  # Service URLs (used by the gateway)
+  ORDERS_URL:   "http://orders:3001"
+  PAYMENTS_URL: "http://payments:3002"
+  STOCK_URL:    "http://stock:3003"

@@ -1,0 +1,10 @@
+# Copy this file to terraform.tfvars and fill in your values.
+# Never commit terraform.tfvars to version control.
+
+project_name       = "lojaveloz"
+environment        = "dev"
+region             = "us-east-1"
+kubernetes_version = "1.30"
+node_count         = 3
+node_instance_type = "t3.medium"
+db_password        = "change-me-in-production"

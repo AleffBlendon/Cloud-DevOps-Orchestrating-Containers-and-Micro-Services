@@ -1,0 +1,93 @@
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# Deployment – API Gateway
+#
+# Rolling Update strategy: Kubernetes replaces pods one at a time, ensuring
+# at least 1 pod is always available during a deployment (maxUnavailable: 1).
+# New pods must be healthy before old ones are terminated (maxSurge: 1).
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  namespace: lojaveloz
+  annotations:
+    kubernetes.io/change-cause: "Initial deployment"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: gateway
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1   # at most 1 pod down during rollout
+      maxSurge: 1         # at most 1 extra pod during rollout
+  template:
+    metadata:
+      labels:
+        app: gateway
+    spec:
+      containers:
+        - name: gateway
+          image: cloud-devops-gateway:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          env:
+            - name: PORT
+              value: "3000"
+            - name: ORDERS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: lojaveloz-config
+                  key: ORDERS_URL
+            - name: PAYMENTS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: lojaveloz-config
+                  key: PAYMENTS_URL
+            - name: STOCK_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: lojaveloz-config
+                  key: STOCK_URL
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu:    "100m"
+              memory: "128Mi"
+            limits:
+              cpu:    "250m"
+              memory: "256Mi"
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# Service – API Gateway
+# NodePort 30007 exposes the gateway externally on every cluster node.
+# Access via:  http://<node-ip>:30007
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+  namespace: lojaveloz
+spec:
+  type: NodePort
+  selector:
+    app: gateway
+  ports:
+    - port: 3000
+      targetPort: 3000
+      nodePort: 30007

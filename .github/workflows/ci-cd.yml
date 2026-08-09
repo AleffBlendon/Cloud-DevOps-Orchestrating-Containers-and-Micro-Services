@@ -1,0 +1,158 @@
+name: CI/CD – Loja Veloz
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY: docker.io
+  IMAGE_PREFIX: ${{ secrets.DOCKERHUB_USERNAME }}/lojaveloz
+
+jobs:
+  # ────────────────────────────────────────────────────────────────────────────
+  # 1. Build & test each service
+  # ────────────────────────────────────────────────────────────────────────────
+  build:
+    name: Build – ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [gateway, orders, payments, stock]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: services/${{ matrix.service }}/package.json
+
+      - name: Install dependencies
+        working-directory: services/${{ matrix.service }}
+        run: npm ci
+
+      # Add your test command here when you have tests
+      # - name: Run tests
+      #   working-directory: services/${{ matrix.service }}
+      #   run: npm test
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # 2. Docker build & push (only on main branch)
+  # ────────────────────────────────────────────────────────────────────────────
+  docker:
+    name: Docker – ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    strategy:
+      matrix:
+        service: [gateway, orders, payments, stock]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_PREFIX }}-${{ matrix.service }}
+          tags: |
+            type=sha,prefix=sha-
+            type=raw,value=latest
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: services/${{ matrix.service }}
+          file:    services/${{ matrix.service }}/Dockerfile
+          push:    true
+          tags:    ${{ steps.meta.outputs.tags }}
+          labels:  ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # 3. Deploy to Kubernetes (only on main branch)
+  # Requires KUBE_CONFIG secret with base64-encoded kubeconfig.
+  # ────────────────────────────────────────────────────────────────────────────
+  deploy:
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    needs: docker
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: "v1.30.0"
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Apply namespace, configmap, and secret
+        run: |
+          kubectl apply -f k8s/namespace.yaml
+          kubectl apply -f k8s/configmap.yaml
+          kubectl apply -f k8s/secret.yaml
+
+      - name: Deploy infrastructure (postgres, rabbitmq)
+        run: |
+          kubectl apply -f k8s/postgres.yaml
+          kubectl apply -f k8s/rabbitmq.yaml
+
+      - name: Deploy application services
+        run: |
+          kubectl apply -f k8s/gateway.yaml
+          kubectl apply -f k8s/orders.yaml
+          kubectl apply -f k8s/payments.yaml
+          kubectl apply -f k8s/stock.yaml
+
+      - name: Apply HPA
+        run: kubectl apply -f k8s/hpa-orders.yaml
+
+      - name: Deploy observability stack
+        run: |
+          kubectl apply -f k8s/prometheus.yaml
+          kubectl apply -f k8s/grafana.yaml
+
+      - name: Update images to current SHA
+        env:
+          SHA: sha-${{ github.sha }}
+        run: |
+          kubectl set image deployment/gateway  gateway=${{ env.IMAGE_PREFIX }}-gateway:${SHA}  -n lojaveloz
+          kubectl set image deployment/orders   orders=${{ env.IMAGE_PREFIX }}-orders:${SHA}    -n lojaveloz
+          kubectl set image deployment/payments payments=${{ env.IMAGE_PREFIX }}-payments:${SHA} -n lojaveloz
+          kubectl set image deployment/stock    stock=${{ env.IMAGE_PREFIX }}-stock:${SHA}      -n lojaveloz
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/gateway  -n lojaveloz --timeout=120s
+          kubectl rollout status deployment/orders   -n lojaveloz --timeout=120s
+          kubectl rollout status deployment/payments -n lojaveloz --timeout=120s
+          kubectl rollout status deployment/stock    -n lojaveloz --timeout=120s
+
+      - name: Verify deployments
+        run: kubectl get pods -n lojaveloz

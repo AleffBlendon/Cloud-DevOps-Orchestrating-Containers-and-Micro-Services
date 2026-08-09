@@ -1,0 +1,142 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Loja Veloz – local development stack
+# Usage:  docker-compose up --build
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: lojaveloz-postgres
+    environment:
+      POSTGRES_USER:     postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB:       lojaveloz
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── RabbitMQ ────────────────────────────────────────────────────────────────
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: lojaveloz-rabbitmq
+    ports:
+      - "5672:5672"    # AMQP
+      - "15672:15672"  # Management UI  →  http://localhost:15672  (guest/guest)
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── API Gateway ─────────────────────────────────────────────────────────────
+  gateway:
+    build:
+      context: ./services/gateway
+      dockerfile: Dockerfile
+    container_name: lojaveloz-gateway
+    ports:
+      - "3000:3000"
+    environment:
+      PORT:         3000
+      ORDERS_URL:   http://orders:3001
+      PAYMENTS_URL: http://payments:3002
+      STOCK_URL:    http://stock:3003
+    depends_on:
+      - orders
+      - payments
+      - stock
+    restart: unless-stopped
+
+  # ── Orders service ──────────────────────────────────────────────────────────
+  orders:
+    build:
+      context: ./services/orders
+      dockerfile: Dockerfile
+    container_name: lojaveloz-orders
+    ports:
+      - "3001:3001"
+    environment:
+      PORT:         3001
+      DB_HOST:      postgres
+      DB_PORT:      5432
+      DB_NAME:      lojaveloz
+      DB_USER:      postgres
+      DB_PASSWORD:  postgres
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Payments service (mock) ─────────────────────────────────────────────────
+  payments:
+    build:
+      context: ./services/payments
+      dockerfile: Dockerfile
+    container_name: lojaveloz-payments
+    ports:
+      - "3002:3002"
+    environment:
+      PORT: 3002
+    restart: unless-stopped
+
+  # ── Stock service ───────────────────────────────────────────────────────────
+  stock:
+    build:
+      context: ./services/stock
+      dockerfile: Dockerfile
+    container_name: lojaveloz-stock
+    ports:
+      - "3003:3003"
+    environment:
+      PORT: 3003
+    restart: unless-stopped
+
+  # ── Prometheus ──────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: lojaveloz-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+    restart: unless-stopped
+
+  # ── Grafana ─────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: lojaveloz-grafana
+    ports:
+      - "3004:3000"    # http://localhost:3004  (admin/admin)
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP:     "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  prometheus_data:
+  grafana_data:

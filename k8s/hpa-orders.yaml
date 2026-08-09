@@ -1,0 +1,43 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# HorizontalPodAutoscaler – Orders Service
+#
+# Scales the orders Deployment between 2 and 10 replicas based on average CPU
+# utilisation.  When average CPU across all pods exceeds 60 %, Kubernetes adds
+# more replicas; when load drops, it scales back down (after a stabilisation
+# window to avoid flapping).
+#
+# Pre-requisite: metrics-server must be running in the cluster.
+#   kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: orders-hpa
+  namespace: lojaveloz
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: orders
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60   # scale up when average CPU > 60 %
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 120  # wait 2 min before scaling down
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60            # remove at most 1 pod per minute
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 30            # add at most 2 pods per 30 s

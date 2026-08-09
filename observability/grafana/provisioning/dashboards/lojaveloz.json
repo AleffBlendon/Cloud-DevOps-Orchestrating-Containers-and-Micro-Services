@@ -1,0 +1,57 @@
+{
+  "title": "Loja Veloz – Overview",
+  "uid": "lojaveloz-overview",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Orders Created (total)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "orders_created_total",
+          "legendFormat": "Total Orders"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Payments Approved vs Declined",
+      "type": "piechart",
+      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 0 },
+      "targets": [
+        {
+          "expr": "payments_processed_total",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Gateway – Requests per Second",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "rate(gateway_http_requests_total[1m])",
+          "legendFormat": "{{method}} {{route}} {{status}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Stock Reservations",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 4 },
+      "targets": [
+        {
+          "expr": "stock_reservations_total",
+          "legendFormat": "{{result}}"
+        }
+      ]
+    }
+  ]
+}
