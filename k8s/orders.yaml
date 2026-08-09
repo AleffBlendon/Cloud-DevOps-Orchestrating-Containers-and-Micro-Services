@@ -28,7 +28,7 @@ spec:
       containers:
         - name: orders
           image: cloud-devops-orders:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3001
           env:

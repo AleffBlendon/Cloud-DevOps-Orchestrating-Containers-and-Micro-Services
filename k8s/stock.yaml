@@ -28,7 +28,7 @@ spec:
       containers:
         - name: stock
           image: cloud-devops-stock:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3003
           env:

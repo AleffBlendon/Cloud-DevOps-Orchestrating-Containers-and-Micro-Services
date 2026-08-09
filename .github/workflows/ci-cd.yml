@@ -139,14 +139,20 @@ jobs:
           kubectl apply -f k8s/prometheus.yaml
           kubectl apply -f k8s/grafana.yaml
 
-      - name: Update images to current SHA
-        env:
-          SHA: sha-${{ github.sha }}
+      - name: Build and load images into kind
+        # kind clusters are isolated from the host Docker Hub.
+        # Images must be built locally and loaded directly into the cluster
+        # nodes so that pods can pull them (imagePullPolicy: IfNotPresent).
         run: |
-          kubectl set image deployment/gateway  gateway=${{ env.IMAGE_PREFIX }}-gateway:${SHA}  -n lojaveloz
-          kubectl set image deployment/orders   orders=${{ env.IMAGE_PREFIX }}-orders:${SHA}    -n lojaveloz
-          kubectl set image deployment/payments payments=${{ env.IMAGE_PREFIX }}-payments:${SHA} -n lojaveloz
-          kubectl set image deployment/stock    stock=${{ env.IMAGE_PREFIX }}-stock:${SHA}      -n lojaveloz
+          docker build -t lojaveloz-gateway:latest  services/gateway
+          docker build -t lojaveloz-orders:latest   services/orders
+          docker build -t lojaveloz-payments:latest services/payments
+          docker build -t lojaveloz-stock:latest    services/stock
+
+          kind load docker-image lojaveloz-gateway:latest  --name lojaveloz
+          kind load docker-image lojaveloz-orders:latest   --name lojaveloz
+          kind load docker-image lojaveloz-payments:latest --name lojaveloz
+          kind load docker-image lojaveloz-stock:latest    --name lojaveloz
 
       - name: Wait for rollout
         run: |

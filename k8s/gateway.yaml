@@ -31,7 +31,7 @@ spec:
       containers:
         - name: gateway
           image: cloud-devops-gateway:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000
           env:
