@@ -4,6 +4,9 @@ Arquitetura de microsserviços para e-commerce, com Node.js, PostgreSQL, RabbitM
 
 ---
 
+## Link do video: 
+https://lnkd.in/p/ggb388et
+
 ## Serviços
 
 | Serviço    | Porta | Descrição                          |
